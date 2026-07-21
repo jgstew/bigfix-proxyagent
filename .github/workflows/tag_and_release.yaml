@@ -4,7 +4,7 @@ name: Tag and Release
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - "bigfix_proxyagent/__init__.py"
       - ".github/workflows/tag_and_release.yaml"
@@ -85,7 +85,7 @@ jobs:
         if: steps.tagged.outputs.tagged == 1
         uses: lewagon/wait-on-check-action@v0.2
         with:
-          ref: master
+          ref: main
           running-workflow-name: "Tag and Release"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 50
