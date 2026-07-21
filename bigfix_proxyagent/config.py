@@ -9,15 +9,20 @@ commands (``set <field> <value>``). This module makes that reusable:
 - :func:`apply_set_command` parses and validates one ``set`` command against
   that declaration and calls back to persist it;
 - :func:`set_toml_option` / :func:`clear_toml_option` edit a TOML config file
-  in place (comments preserved via tomlkit when importable, else a regex
-  fallback), and :func:`write_validated_toml` refuses to write a file that
-  would not load back.
+  in place (comments preserved via tomlkit), and :func:`write_validated_toml`
+  refuses to write a file that would not load back.
 
-Editing a *flat* config (top-level keys or a ``[table]``) is covered here; a
-plugin whose config is an array-of-tables (one entry per device, like
-servermon's ``[[urls]]``) keeps that model-specific editing itself but can
-still reuse the parsers, the registry, the dispatcher, and
-:func:`write_validated_toml`.
+Two config shapes are covered: a *flat* config (top-level keys or a
+``[table]``) via :func:`set_toml_option` / :func:`clear_toml_option`, and an
+*array-of-tables* (one ``[[table]]`` per device, keyed by an identity field
+like servermon's ``url``) via :func:`set_aot_option`, :func:`clear_aot_option`,
+:func:`remove_aot_entry`, and :func:`add_aot_entry`. All edit through tomlkit
+so comments survive, and validate before committing. tomlkit is loaded via the
+standard plugin precedence (installed, plugin ``vendor/``, else the SDK's
+bundled copy), so it is effectively always available; an edit for which it
+cannot be loaded raises :class:`ConfigError`. A plugin supplies its own schema
+``validate`` callback and, for the array-of-tables editors, the table name and
+identity key.
 """
 
 from __future__ import annotations
@@ -286,22 +291,13 @@ def apply_set_command(
 
 
 # --- TOML editing --------------------------------------------------------------
-
-_HEADER_RE = re.compile(r"^\s*\[")
-
-
-def toml_literal(value: object) -> str:
-    """Render a Python str/int/float/bool as a TOML value for line editing.
-
-    Strings become basic strings with backslashes and quotes escaped, so a
-    value like a ``\\d+`` regex round-trips back unchanged through ``tomllib``.
-    """
-    if isinstance(value, bool):  # before int: bool is a subclass of int
-        return "true" if value else "false"
-    if isinstance(value, (int, float)):
-        return repr(value)
-    escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
+#
+# Editing goes through tomlkit (so comments and formatting survive), loaded via
+# the standard plugin precedence - an installed tomlkit, a wheel in the
+# plugin's registered ``vendor/``, else the copy bundled inside the SDK. tomlkit
+# is therefore effectively always available; an edit for which it cannot be
+# loaded (a corrupt/incompatible bundled wheel) fails explicitly with
+# :class:`ConfigError` rather than silently degrading.
 
 
 def write_validated_toml(
@@ -336,25 +332,20 @@ def set_toml_option(
     """Set ``key = value`` in a TOML file, preserving comments and formatting.
 
     ``table`` selects a top-level ``[table]`` (created if missing); ``None``
-    means a top-level key. Uses tomlkit if it is importable, else a regex line
-    edit. The result is validated by :func:`write_validated_toml` before it is
-    committed.
+    means a top-level key. The result is validated by
+    :func:`write_validated_toml` before it is committed. Raises
+    :class:`ConfigError` if tomlkit cannot be loaded.
     """
     path = Path(path)
-    tomlkit = _load_tomlkit()
-    if tomlkit is not None:
-        doc = _load_tomlkit_doc(path, tomlkit)
-        target = doc
-        if table is not None:
-            if table not in doc:
-                doc[table] = tomlkit.table()
-            target = doc[table]
-        target[key] = value
-        write_validated_toml(path, tomlkit.dumps(doc), validate)
-    else:
-        lines = _read_lines(path)
-        _set_line(lines, key, toml_literal(value), table)
-        write_validated_toml(path, "\n".join(lines) + "\n", validate)
+    tomlkit = _require_tomlkit(path)
+    doc = _load_tomlkit_doc(path, tomlkit)
+    target = doc
+    if table is not None:
+        if table not in doc:
+            doc[table] = tomlkit.table()
+        target = doc[table]
+    target[key] = value
+    write_validated_toml(path, tomlkit.dumps(doc), validate)
 
 
 def clear_toml_option(
@@ -367,21 +358,17 @@ def clear_toml_option(
     """Remove ``key`` from a TOML file (top-level or from ``[table]``).
 
     A no-op if the key (or table) is already absent. Preserves comments and
-    formatting; validated before commit.
+    formatting; validated before commit. Raises :class:`ConfigError` if tomlkit
+    cannot be loaded.
     """
     path = Path(path)
-    tomlkit = _load_tomlkit()
-    if tomlkit is not None:
-        doc = _load_tomlkit_doc(path, tomlkit)
-        if table is None:
-            doc.pop(key, None)
-        elif table in doc:
-            doc[table].pop(key, None)
-        write_validated_toml(path, tomlkit.dumps(doc), validate)
-    else:
-        lines = _read_lines(path)
-        _clear_line(lines, key, table)
-        write_validated_toml(path, "\n".join(lines) + "\n", validate)
+    tomlkit = _require_tomlkit(path)
+    doc = _load_tomlkit_doc(path, tomlkit)
+    if table is None:
+        doc.pop(key, None)
+    elif table in doc:
+        doc[table].pop(key, None)
+    write_validated_toml(path, tomlkit.dumps(doc), validate)
 
 
 def _load_tomlkit():
@@ -390,13 +377,21 @@ def _load_tomlkit():
     Uses the standard plugin precedence (:func:`vendor.load_wheel_or_bundled`):
     an installed tomlkit, then a loose wheel in the plugin's registered
     ``vendor/`` (see :func:`vendor.set_plugin_vendor_dir`), then the copy
-    bundled inside the SDK. So comment-preserving edits work with no action
-    from the plugin, and a plugin can still pin its own tomlkit by vendoring a
-    wheel. If none can be loaded the caller uses the regex fallback.
+    bundled inside the SDK. Only returns None if even the bundled wheel cannot
+    be loaded (corrupt or incompatible), in which case the editors raise via
+    :func:`_require_tomlkit`.
     """
     from . import vendor
 
     return vendor.load_wheel_or_bundled("tomlkit")
+
+
+def _require_tomlkit(path: Path):
+    """The tomlkit module, or :class:`ConfigError` if it cannot be loaded."""
+    tomlkit = _load_tomlkit()
+    if tomlkit is None:
+        raise ConfigError(f"cannot edit {path}: tomlkit is unavailable")
+    return tomlkit
 
 
 def _load_tomlkit_doc(path: Path, tomlkit):
@@ -410,66 +405,183 @@ def _load_tomlkit_doc(path: Path, tomlkit):
         raise ConfigError(f"invalid TOML in {path}: {error}") from error
 
 
-def _read_lines(path: Path) -> list[str]:
-    try:
-        return path.read_text(encoding="utf-8").splitlines()
-    except OSError as error:
-        raise ConfigError(f"cannot read {path}: {error}") from error
+# --- array-of-tables editing ---------------------------------------------------
+#
+# A plugin whose config is an array-of-tables (one ``[[table]]`` per device,
+# keyed by an identity field - servermon's ``url``, say) edits an entry by
+# matching that field's value, via tomlkit so comments survive. When the last
+# entry is removed a ``table = []`` placeholder is left behind so a schema that
+# requires the key still loads; conversely that placeholder is dropped before a
+# new entry is appended, since an empty array cannot hold a ``[[table]]`` entry.
+#
+# ``match_value`` is a string (device identity keys are strings); a Callable
+# ``validate`` runs on the parsed result before the atomic write, so an edit
+# that would violate the plugin's schema (a duplicate id, a bad value) raises
+# :class:`ConfigError` and leaves the file unchanged.
+
+Validate = Callable[[dict[str, Any]], None]
 
 
-def _section_bounds(lines: list[str], table: str | None) -> tuple[int, int, bool]:
-    """Return ``(start, end, found)`` line range for a section's body.
+def set_aot_option(
+    path: Path | str,
+    table: str,
+    match_key: str,
+    match_value: str,
+    key: str,
+    value: object,
+    *,
+    validate: Validate | None = None,
+) -> None:
+    """Set ``key = value`` on the ``[[table]]`` entry whose ``match_key`` equals
+    ``match_value``, editing the file in place (comments/formatting preserved).
 
-    For ``table=None`` the body is the top-level keys before the first table
-    header. For a named table it is the lines after its ``[table]`` header up
-    to the next header. ``found`` is False when a named table is absent.
+    Raises :class:`ConfigError` if no such entry exists, tomlkit cannot be
+    loaded, or the result would not parse (or ``validate`` rejects it), leaving
+    the file unchanged.
     """
-    if table is None:
-        end = next(
-            (i for i, line in enumerate(lines) if _HEADER_RE.match(line)), len(lines)
-        )
-        return 0, end, True
-    header_re = re.compile(rf"^\s*\[{re.escape(table)}\]\s*(#.*)?$")
-    for i, line in enumerate(lines):
-        if header_re.match(line):
-            start = i + 1
-            end = next(
-                (
-                    j
-                    for j in range(start, len(lines))
-                    if _HEADER_RE.match(lines[j])
-                ),
-                len(lines),
-            )
-            return start, end, True
-    return len(lines), len(lines), False
+    path = Path(path)
+    tomlkit = _require_tomlkit(path)
+    _edit_aot_with_tomlkit(
+        path,
+        table,
+        match_key,
+        match_value,
+        tomlkit,
+        lambda entry: entry.__setitem__(key, value),
+        validate,
+    )
 
 
-def _set_line(lines: list[str], key: str, literal: str, table: str | None) -> None:
-    start, end, found = _section_bounds(lines, table)
-    if not found:
-        # Named table missing: append it with the new key.
-        if lines and lines[-1].strip():
-            lines.append("")
-        lines.append(f"[{table}]")
-        lines.append(f"{key} = {literal}")
-        return
-    key_re = re.compile(rf"^\s*{re.escape(key)}\s*=")
-    for i in range(start, end):
-        if key_re.match(lines[i]):
-            lines[i] = f"{key} = {literal}"
+def clear_aot_option(
+    path: Path | str,
+    table: str,
+    match_key: str,
+    match_value: str,
+    key: str,
+    *,
+    validate: Validate | None = None,
+) -> None:
+    """Remove ``key`` from the matching ``[[table]]`` entry (a no-op if the key
+    is already absent), editing in place. Raises :class:`ConfigError` if no
+    matching entry exists, tomlkit cannot be loaded, or the result would not
+    parse.
+    """
+    path = Path(path)
+    tomlkit = _require_tomlkit(path)
+    _edit_aot_with_tomlkit(
+        path,
+        table,
+        match_key,
+        match_value,
+        tomlkit,
+        lambda entry: entry.pop(key, None),
+        validate,
+    )
+
+
+def remove_aot_entry(
+    path: Path | str,
+    table: str,
+    match_key: str,
+    match_value: str,
+    *,
+    validate: Validate | None = None,
+) -> None:
+    """Remove the matching ``[[table]]`` entry from the file (in-place edit).
+
+    If the last entry is removed, ``table = []`` is left behind so the file
+    still loads. Raises :class:`ConfigError` if no matching entry exists or
+    tomlkit cannot be loaded.
+    """
+    path = Path(path)
+    tomlkit = _require_tomlkit(path)
+    _remove_aot_with_tomlkit(path, table, match_key, match_value, tomlkit, validate)
+
+
+def add_aot_entry(
+    path: Path | str,
+    table: str,
+    entry: dict[str, object],
+    *,
+    validate: Validate | None = None,
+) -> None:
+    """Append a new ``[[table]]`` entry with the given ``entry`` fields (in-place
+    edit). A leftover ``table = []`` placeholder is replaced by the new entry.
+
+    The result is re-parsed (and ``validate``-checked) before it is committed,
+    so a schema violation (e.g. a duplicate identity) raises
+    :class:`ConfigError` and leaves the file unchanged. Raises
+    :class:`ConfigError` if tomlkit cannot be loaded.
+    """
+    path = Path(path)
+    tomlkit = _require_tomlkit(path)
+    _add_aot_with_tomlkit(path, table, entry, tomlkit, validate)
+
+
+def _edit_aot_with_tomlkit(
+    path: Path,
+    table: str,
+    match_key: str,
+    match_value: str,
+    tomlkit,
+    mutate: Callable[[Any], None],
+    validate: Validate | None,
+) -> None:
+    doc = _load_tomlkit_doc(path, tomlkit)
+    for entry in doc.get(table, []):
+        if entry.get(match_key) == match_value:
+            mutate(entry)
+            write_validated_toml(path, tomlkit.dumps(doc), validate)
             return
-    lines.insert(end, f"{key} = {literal}")
+    raise ConfigError(
+        f"{path}: no [[{table}]] entry with {match_key} = {match_value!r} found"
+    )
 
 
-def _clear_line(lines: list[str], key: str, table: str | None) -> None:
-    start, end, found = _section_bounds(lines, table)
-    if not found:
-        return
-    key_re = re.compile(rf"^\s*{re.escape(key)}\s*=")
-    kept = [
-        line
-        for i, line in enumerate(lines)
-        if not (start <= i < end and key_re.match(line))
-    ]
-    lines[:] = kept
+def _remove_aot_with_tomlkit(
+    path: Path,
+    table: str,
+    match_key: str,
+    match_value: str,
+    tomlkit,
+    validate: Validate | None,
+) -> None:
+    doc = _load_tomlkit_doc(path, tomlkit)
+    entries = doc.get(table)
+    if entries is not None:
+        for i, entry in enumerate(entries):
+            if entry.get(match_key) == match_value:
+                del entries[i]
+                # tomlkit drops the key entirely once the array is empty; leave
+                # "table = []" so a schema that requires the key still parses.
+                if len(doc.get(table, [])) == 0:
+                    doc[table] = []
+                write_validated_toml(path, tomlkit.dumps(doc), validate)
+                return
+    raise ConfigError(
+        f"{path}: no [[{table}]] entry with {match_key} = {match_value!r} found"
+    )
+
+
+def _add_aot_with_tomlkit(
+    path: Path,
+    table: str,
+    entry: dict[str, object],
+    tomlkit,
+    validate: Validate | None,
+) -> None:
+    doc = _load_tomlkit_doc(path, tomlkit)
+    new_table = tomlkit.table()
+    for key, value in entry.items():
+        new_table[key] = value
+    existing = doc.get(table)
+    # An empty "table = []" (what a full delete leaves behind) is not an
+    # array-of-tables and cannot hold a [[table]] entry, so replace it; a
+    # populated array is appended to; a missing key is created fresh.
+    if existing is not None and len(existing) > 0:
+        existing.append(new_table)
+    else:
+        aot = tomlkit.aot()
+        aot.append(new_table)
+        doc[table] = aot
+    write_validated_toml(path, tomlkit.dumps(doc), validate)

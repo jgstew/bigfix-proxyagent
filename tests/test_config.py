@@ -13,7 +13,9 @@ from bigfix_proxyagent.config import (
     ConfigError,
     Field,
     Settings,
+    add_aot_entry,
     apply_set_command,
+    clear_aot_option,
     clear_toml_option,
     parse_bool,
     parse_float,
@@ -22,10 +24,11 @@ from bigfix_proxyagent.config import (
     parse_positive_float,
     parse_positive_int,
     parse_regex,
+    remove_aot_entry,
     resolve_refresh_interval,
     resolve_timeout_seconds,
+    set_aot_option,
     set_toml_option,
-    toml_literal,
     write_validated_toml,
 )
 
@@ -219,21 +222,6 @@ def test_apply_set_persist_failure():
     assert result == "Error"
 
 
-# --- toml_literal ------------------------------------------------------------
-
-
-def test_toml_literal():
-    assert toml_literal(True) == "true"
-    assert toml_literal(False) == "false"
-    assert toml_literal(5) == "5"
-    assert toml_literal(2.5) == "2.5"
-    # a single backslash is doubled; a quote is backslash-escaped
-    assert toml_literal("a\\d") == '"a\\\\d"'
-    assert toml_literal('say "hi"') == '"say \\"hi\\""'
-    # and the rendered literal parses back to the original string
-    assert tomllib.loads(f"x = {toml_literal(chr(92) + 'd+')}")["x"] == "\\d+"
-
-
 # --- write_validated_toml ----------------------------------------------------
 
 
@@ -274,14 +262,7 @@ def test_load_tomlkit_absent(monkeypatch):
     assert config._load_tomlkit() is None
 
 
-# --- TOML editing: run every case under BOTH backends ------------------------
-
-
-@pytest.fixture(params=["tomlkit", "regex"])
-def backend(request, monkeypatch):
-    if request.param == "regex":
-        monkeypatch.setattr(config, "_load_tomlkit", lambda: None)
-    return request.param
+# --- TOML editing (tomlkit; comments preserved) ------------------------------
 
 
 def load(path):
@@ -289,7 +270,7 @@ def load(path):
         return tomllib.load(f)
 
 
-def test_set_top_level_new_and_replace(backend, tmp_path):
+def test_set_top_level_new_and_replace(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text("a = 1\n")
     set_toml_option(path, "b", 2)
@@ -298,7 +279,7 @@ def test_set_top_level_new_and_replace(backend, tmp_path):
     assert load(path)["a"] == 9
 
 
-def test_set_in_existing_table_preserves_comments(backend, tmp_path):
+def test_set_in_existing_table_preserves_comments(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text("# keep me\n[settings]\ntimeout = 1  # inline\n")
     set_toml_option(path, "timeout", 5, table="settings")
@@ -308,21 +289,21 @@ def test_set_in_existing_table_preserves_comments(backend, tmp_path):
     assert "# keep me" in path.read_text()
 
 
-def test_set_creates_missing_table(backend, tmp_path):
+def test_set_creates_missing_table(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text("a = 1\n")
     set_toml_option(path, "level", "high", table="settings")
     assert load(path)["settings"]["level"] == "high"
 
 
-def test_set_string_value_roundtrips_regex_safe(backend, tmp_path):
+def test_set_string_value_roundtrips(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text("[settings]\n")
     set_toml_option(path, "match", r"\d+", table="settings")
     assert load(path)["settings"]["match"] == r"\d+"
 
 
-def test_clear_top_level_and_from_table(backend, tmp_path):
+def test_clear_top_level_and_from_table(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text("a = 1\nb = 2\n[settings]\nx = 1\ny = 2\n")
     clear_toml_option(path, "a")
@@ -333,21 +314,21 @@ def test_clear_top_level_and_from_table(backend, tmp_path):
     assert data["settings"] == {"y": 2}
 
 
-def test_clear_absent_key_is_noop(backend, tmp_path):
+def test_clear_absent_key_is_noop(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text("[settings]\nx = 1\n")
     clear_toml_option(path, "missing", table="settings")
     assert load(path)["settings"] == {"x": 1}
 
 
-def test_clear_missing_table_is_noop(backend, tmp_path):
+def test_clear_missing_table_is_noop(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text("a = 1\n")
     clear_toml_option(path, "x", table="settings")
     assert load(path) == {"a": 1}
 
 
-def test_set_validate_callback_rejects(backend, tmp_path):
+def test_set_validate_callback_rejects(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text("a = 1\n")
 
@@ -359,7 +340,7 @@ def test_set_validate_callback_rejects(backend, tmp_path):
     assert load(path) == {"a": 1}  # unchanged
 
 
-def test_set_into_empty_file(backend, tmp_path):
+def test_set_into_empty_file(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text("")
     set_toml_option(path, "first", "value", table="settings")
@@ -369,14 +350,14 @@ def test_set_into_empty_file(backend, tmp_path):
 # --- editing error paths -----------------------------------------------------
 
 
-def test_tomlkit_backend_rejects_unparseable_file(tmp_path):
+def test_rejects_unparseable_file(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text("a = = 1\n")  # invalid TOML
     with pytest.raises(ConfigError, match="invalid TOML"):
         set_toml_option(path, "b", 2)
 
 
-def test_read_error_tomlkit_backend(tmp_path, monkeypatch):
+def test_read_error(tmp_path, monkeypatch):
     import pathlib
 
     path = tmp_path / "c.toml"
@@ -390,16 +371,174 @@ def test_read_error_tomlkit_backend(tmp_path, monkeypatch):
         set_toml_option(path, "b", 2)
 
 
-def test_read_error_regex_backend(tmp_path, monkeypatch):
-    import pathlib
-
+def test_flat_edit_requires_tomlkit(tmp_path, monkeypatch):
+    # tomlkit is bundled in the SDK, so this only happens if the bundled wheel
+    # is corrupt/incompatible; editing then fails explicitly rather than crash.
     path = tmp_path / "c.toml"
     path.write_text("a = 1\n")
     monkeypatch.setattr(config, "_load_tomlkit", lambda: None)
-
-    def boom(self, *a, **k):
-        raise OSError("locked")
-
-    monkeypatch.setattr(pathlib.Path, "read_text", boom)
-    with pytest.raises(ConfigError, match="cannot read"):
+    with pytest.raises(ConfigError, match="tomlkit is unavailable"):
         set_toml_option(path, "b", 2)
+    with pytest.raises(ConfigError, match="tomlkit is unavailable"):
+        clear_toml_option(path, "a")
+    assert load(path) == {"a": 1}  # unchanged
+
+
+# --- array-of-tables editing (tomlkit; comments preserved) -------------------
+#
+# A generic [[table]] keyed by an identity field (here [[items]] keyed by id),
+# to prove the editor is not servermon/url specific.
+
+AOT_CONFIG = """\
+# global comment
+[[items]]
+id = "alpha"  # entry comment
+weight = 1
+
+[[items]]
+id = "beta"
+"""
+
+
+def test_set_aot_option_inserts(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text(AOT_CONFIG)
+    set_aot_option(path, "items", "id", "beta", "weight", 7)
+    data = load(path)
+    assert data["items"][1] == {"id": "beta", "weight": 7}
+    assert data["items"][0] == {"id": "alpha", "weight": 1}  # untouched
+    text = path.read_text()
+    assert "# global comment" in text  # comments preserved
+    assert "# entry comment" in text
+
+
+def test_set_aot_option_replaces(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text(AOT_CONFIG)
+    set_aot_option(path, "items", "id", "alpha", "weight", 99)
+    assert load(path)["items"][0]["weight"] == 99
+    assert path.read_text().count("weight") == 1  # replaced, not duplicated
+
+
+def test_set_aot_option_string_backslash_roundtrips(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text(AOT_CONFIG)
+    set_aot_option(path, "items", "id", "beta", "pattern", r"\d{3}\s+error")
+    assert load(path)["items"][1]["pattern"] == r"\d{3}\s+error"
+
+
+def test_set_aot_option_unknown_entry(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text(AOT_CONFIG)
+    with pytest.raises(ConfigError, match=r"no \[\[items\]\] entry"):
+        set_aot_option(path, "items", "id", "gamma", "weight", 1)
+
+
+def test_clear_aot_option_removes(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text(AOT_CONFIG)
+    clear_aot_option(path, "items", "id", "alpha", "weight")
+    assert load(path)["items"][0] == {"id": "alpha"}
+
+
+def test_clear_aot_option_absent_key_is_noop(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text(AOT_CONFIG)
+    clear_aot_option(path, "items", "id", "beta", "weight")  # never set
+    assert load(path)["items"][1] == {"id": "beta"}
+
+
+def test_clear_aot_option_unknown_entry(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text(AOT_CONFIG)
+    with pytest.raises(ConfigError, match=r"no \[\[items\]\] entry"):
+        clear_aot_option(path, "items", "id", "gamma", "weight")
+
+
+def test_remove_aot_entry(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text(AOT_CONFIG)
+    remove_aot_entry(path, "items", "id", "alpha")
+    assert [e["id"] for e in load(path)["items"]] == ["beta"]
+    text = path.read_text()
+    assert "# global comment" in text  # content outside the block survives
+    assert "alpha" not in text
+
+
+def test_remove_last_aot_entry_leaves_empty_array(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text('[[items]]\nid = "only"\n')
+    remove_aot_entry(path, "items", "id", "only")
+    assert load(path) == {"items": []}
+
+
+def test_remove_aot_entry_unknown(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text(AOT_CONFIG)
+    with pytest.raises(ConfigError, match=r"no \[\[items\]\] entry"):
+        remove_aot_entry(path, "items", "id", "gamma")
+
+
+def test_add_aot_entry_appends(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text(AOT_CONFIG)
+    add_aot_entry(path, "items", {"id": "gamma"})
+    assert [e["id"] for e in load(path)["items"]] == ["alpha", "beta", "gamma"]
+    assert "# global comment" in path.read_text()  # existing content preserved
+
+
+def test_add_aot_entry_to_empty_array(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text("items = []\n")
+    add_aot_entry(path, "items", {"id": "first"})
+    assert [e["id"] for e in load(path)["items"]] == ["first"]
+
+
+def test_add_aot_entry_multiple_fields(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text("items = []\n")
+    add_aot_entry(path, "items", {"id": "x", "weight": 3})
+    assert load(path)["items"][0] == {"id": "x", "weight": 3}
+
+
+def test_aot_edit_runs_validate_and_leaves_file_unchanged(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text(AOT_CONFIG)
+
+    def validate(parsed):
+        raise ConfigError("nope")
+
+    with pytest.raises(ConfigError, match="nope"):
+        set_aot_option(path, "items", "id", "alpha", "weight", 5, validate=validate)
+    assert load(path)["items"][0]["weight"] == 1  # unchanged
+
+
+def test_add_aot_entry_validate_rejects_duplicate(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text(AOT_CONFIG)
+
+    def validate(parsed):
+        ids = [e["id"] for e in parsed.get("items", [])]
+        if len(ids) != len(set(ids)):
+            raise ConfigError("duplicate id")
+
+    with pytest.raises(ConfigError, match="duplicate id"):
+        add_aot_entry(path, "items", {"id": "alpha"}, validate=validate)
+    assert len(load(path)["items"]) == 2  # unchanged
+
+
+def test_aot_edit_requires_tomlkit(tmp_path, monkeypatch):
+    # tomlkit is bundled in the SDK; if the bundled wheel is unusable, an
+    # array-of-tables edit fails explicitly rather than crash.
+    path = tmp_path / "c.toml"
+    path.write_text(AOT_CONFIG)
+    monkeypatch.setattr(config, "_load_tomlkit", lambda: None)
+    for call in (
+        lambda: set_aot_option(path, "items", "id", "alpha", "weight", 5),
+        lambda: clear_aot_option(path, "items", "id", "alpha", "weight"),
+        lambda: remove_aot_entry(path, "items", "id", "alpha"),
+        lambda: add_aot_entry(path, "items", {"id": "gamma"}),
+    ):
+        with pytest.raises(ConfigError, match="tomlkit is unavailable"):
+            call()
+    assert load(path)["items"][0]["weight"] == 1  # unchanged
