@@ -37,11 +37,26 @@ pip install bigfix-proxyagent
 ```
 
 A deployed plugin runs straight from its folder under the Management Extender
-with no `pip install` step, so a plugin typically **vendors** this SDK (and any
-other pure-Python dependency) as a wheel in its own `vendor/` directory and
-loads it at startup with `vendor.load_wheel("bigfix-proxyagent", VENDOR_DIR,
-import_name="bigfix_proxyagent")` - the same pattern servermon uses for
-tomlkit.
+with no `pip install` step, so a plugin typically **vendors** this SDK as a
+wheel in its own `vendor/` directory and loads it at startup with
+`vendor.load_wheel("bigfix-proxyagent", VENDOR_DIR,
+import_name="bigfix_proxyagent")`. The SDK's own pure-Python helper
+dependency, `tomlkit`, ships bundled *inside* this wheel (see
+`bigfix_proxyagent/_vendor/`), so a plugin vendors only the one SDK wheel.
+
+Dependencies are loaded with `vendor.load_wheel_or_bundled(name, VENDOR_DIR)`,
+which applies the standard precedence: an installed copy, then a loose
+`<name>-*.whl` the plugin ships in its own `vendor/` (drop one there to pin a
+specific version - it wins), then the copy bundled inside the SDK. Call
+`vendor.set_plugin_vendor_dir(VENDOR_DIR)` once at startup and even the SDK's
+own config editor follows the same precedence for `tomlkit`.
+
+When the bundled copy is used and `vendor/` is writable, the wheel is copied
+into `vendor/` on first use, so later runs load it directly from that file
+instead of extracting it from the SDK wheel each process. Because a loose
+`vendor/` wheel then wins, upgrading the SDK's bundled version has no effect
+until the stale cached wheel is removed - delete `vendor/<name>-*.whl` (or
+redeploy a clean folder) to pick up a newer bundled copy.
 
 ## Quickstart
 
@@ -120,9 +135,10 @@ def main(argv=None):
 
 ## Requirements
 
-Python 3.11+. Standard-library only (`tomlkit`, used for comment-preserving
-config edits, is an optional extra; the config editor falls back to a regex
-edit without it).
+Python 3.11+. Standard-library only at runtime. `tomlkit` (used for
+comment-preserving config edits) is bundled inside the SDK wheel and loaded
+automatically; the config editor falls back to a regex edit if it cannot be
+loaded.
 
 ## License
 

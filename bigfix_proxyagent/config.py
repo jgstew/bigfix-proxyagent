@@ -385,18 +385,18 @@ def clear_toml_option(
 
 
 def _load_tomlkit():
-    """Return the tomlkit module if importable, else None.
+    """Return the tomlkit module if available, else None.
 
-    A plugin that wants comment-preserving edits makes tomlkit importable
-    before calling here - e.g. ``vendor.load_wheel("tomlkit", vendor_dir)`` at
-    startup - otherwise the regex fallback is used.
+    Uses the standard plugin precedence (:func:`vendor.load_wheel_or_bundled`):
+    an installed tomlkit, then a loose wheel in the plugin's registered
+    ``vendor/`` (see :func:`vendor.set_plugin_vendor_dir`), then the copy
+    bundled inside the SDK. So comment-preserving edits work with no action
+    from the plugin, and a plugin can still pin its own tomlkit by vendoring a
+    wheel. If none can be loaded the caller uses the regex fallback.
     """
-    try:
-        import tomlkit
+    from . import vendor
 
-        return tomlkit
-    except ImportError:
-        return None
+    return vendor.load_wheel_or_bundled("tomlkit")
 
 
 def _load_tomlkit_doc(path: Path, tomlkit):

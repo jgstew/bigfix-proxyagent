@@ -40,6 +40,12 @@ path = "bigfix_proxyagent/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["bigfix_proxyagent"]
+# The bundled tomlkit wheel is data, not source; force-include it so a plugin
+# only needs to vendor the SDK wheel (see bigfix_proxyagent/_vendor/).
+artifacts = ["bigfix_proxyagent/_vendor/*.whl"]
+
+[tool.hatch.build.targets.sdist]
+artifacts = ["bigfix_proxyagent/_vendor/*.whl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

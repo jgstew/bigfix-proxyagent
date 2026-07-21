@@ -11,11 +11,27 @@ from typing import Any
 
 def write_text_atomic(path: Path, text: str) -> None:
     """Write text via a temp file + rename so readers never see a partial file."""
+    _write_atomic(path, text, binary=False)
+
+
+def write_bytes_atomic(path: Path, data: bytes) -> None:
+    """Write bytes via a temp file + rename so readers never see a partial file.
+
+    The rename (:func:`os.replace`) is atomic, so concurrent writers of the
+    same content cannot leave a torn file - useful when caching a wheel into a
+    directory that multiple plugin instances may populate at once.
+    """
+    _write_atomic(path, data, binary=True)
+
+
+def _write_atomic(path: Path, data: Any, *, binary: bool) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(text)
+        mode = "wb" if binary else "w"
+        encoding = None if binary else "utf-8"
+        with os.fdopen(fd, mode, encoding=encoding) as f:
+            f.write(data)
         os.replace(tmp, path)
     except BaseException:
         try:
