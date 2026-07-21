@@ -24,7 +24,7 @@ how it does something.
 | `plugin` | `ProxyAgentPlugin` - the command-loop base class (dispatch, report/result writing, ack conventions) |
 | `command` | `Command` - parse a Proxy Agent command file (case-insensitive keys) |
 | `report` | `base_report(...)` (the mandatory + reserved report keys), `network_structure()`, `local_host_name()` |
-| `state` | `DeviceStateStore` - merge-on-save per-device state, report caching, deferred deletion |
+| `state` | `DeviceStateStore` - merge-on-save per-device state (JSON default, or SQLite via `backend="sqlite"` with one-way JSON→SQLite migration and auto-detect of an existing SQLite file), report caching, deferred deletion |
 | `config` | value parsers, a settable-field registry, the `set <field> <value>` action dispatcher, `resolve_refresh_interval` (per-device / settings / default with clamping), and safe TOML editing |
 | `device` | `stable_device_id(key)` - a deterministic device id from a plugin-chosen key |
 | `cli` | `build_base_parser()`, `setup_logging()` - the standard entry-point plumbing |
