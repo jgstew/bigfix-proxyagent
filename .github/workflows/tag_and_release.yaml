@@ -1,0 +1,115 @@
+---
+name: Tag and Release
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "bigfix_proxyagent/__init__.py"
+      - ".github/workflows/tag_and_release.yaml"
+
+# creates git tags and GitHub releases (and uploads the wheel), so the job
+# needs write access to repository contents; everything else stays default-none.
+permissions:
+  contents: write
+
+jobs:
+  release_new_tag:
+    name: Tag and Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout source code"
+        uses: "actions/checkout@v7"
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Read version
+        id: getversion
+        run: |
+          VERSION=$(python -c "import re,pathlib; print(re.search(r'__version__\s*=\s*[\"\x27]([^\"\x27]+)', pathlib.Path('bigfix_proxyagent/__init__.py').read_text()).group(1))")
+          echo "VERSION=$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # need to fetch tags for next step
+      - name: Get tags
+        run: git fetch --tags origin
+
+      # only make release if there is NOT a git tag for this version
+      - name: "Check: package version has corresponding git tag"
+        # this will prevent this from doing anything when run through ACT
+        if: ${{ !env.ACT && contains(steps.getversion.outputs.version, '.') }}
+        id: tagged
+        shell: bash
+        run: |
+          git show-ref --tags --verify --quiet -- "refs/tags/v${STEPS_GETVERSION_OUTPUTS_VERSION}" && tag_not_exists=$? || tag_not_exists=$?
+          echo "exit code was $tag_not_exists"
+          if [ $tag_not_exists -eq 0 ]
+          then
+          echo will not release because tag already exists
+          echo "tagged=0" >> $GITHUB_OUTPUT
+          else
+          echo will do release because tag does not already exist
+          echo "tagged=1" >> $GITHUB_OUTPUT
+          fi
+        env:
+          STEPS_GETVERSION_OUTPUTS_VERSION: ${{ steps.getversion.outputs.version }}
+
+      # Cache the pre-commit environments based on the config file hash
+      - name: Cache Pre-Commit Environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-
+
+      # run pre-commit hooks on all files, even if they are not staged
+      - name: Run pre-commit
+        if: always()
+        uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: >-
+            --color=always
+            --all-files
+            --hook-stage manual
+
+      # wait for all other tests to succeed
+      #   what if no other tests?
+      - name: Wait for tests to succeed
+        if: steps.tagged.outputs.tagged == 1
+        uses: lewagon/wait-on-check-action@v0.2
+        with:
+          ref: master
+          running-workflow-name: "Tag and Release"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 50
+
+      - name: Install build tool
+        if: steps.tagged.outputs.tagged == 1
+        run: pip install build
+
+      - name: Run build
+        if: steps.tagged.outputs.tagged == 1
+        run: python3 -m build
+
+      - name: Get Wheel File
+        if: steps.tagged.outputs.tagged == 1
+        id: getwheelfile
+        shell: bash
+        run: echo "wheelfile=$(find "dist" -type f -name "*.whl")" >> $GITHUB_OUTPUT
+
+      - name: Automatically create github release
+        if: steps.tagged.outputs.tagged == 1
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: v${{ steps.getversion.outputs.version }}
+          prerelease: false
+          files: |
+            ${{ steps.getwheelfile.outputs.wheelfile }}

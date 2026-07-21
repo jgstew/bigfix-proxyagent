@@ -1,0 +1,30 @@
+---
+name: misspell
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  misspell:
+    name: runner / misspell
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code.
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: misspell
+        if: ${{ !env.ACT }}
+        uses: reviewdog/action-misspell@v1.27.0
+        with:
+          github_token: ${{ secrets.github_token }}
+          locale: "US"
+          reporter: github-check # Change reporter.
