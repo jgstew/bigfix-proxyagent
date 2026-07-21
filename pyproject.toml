@@ -31,8 +31,9 @@ dynamic = ["version"]
 Homepage = "https://github.com/jgstew/bigfix-proxyagent"
 
 [dependency-groups]
-# tomlkit is an optional runtime extra (comment-preserving TOML edits; the
-# config editor falls back to regex without it) - here only to test both paths.
+# tomlkit does comment-preserving TOML edits; the SDK bundles a copy in
+# _vendor/, so this is only here to exercise the config editor under an
+# installed (rather than bundled) tomlkit in tests.
 dev = ["pytest", "tomlkit"]
 
 [tool.hatch.version]
