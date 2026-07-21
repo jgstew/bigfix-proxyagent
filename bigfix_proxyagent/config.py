@@ -43,7 +43,55 @@ class ConfigError(ValueError):
     """Raised when configuration is invalid or an edit would corrupt the file."""
 
 
+# --- refresh interval ----------------------------------------------------------
+
+# How often a proxied device's data is refreshed, in minutes. A plugin resolves
+# the effective value per device with :func:`resolve_refresh_interval`.
+DEFAULT_REFRESH_INTERVAL_MINUTES = 30
+MIN_REFRESH_INTERVAL_MINUTES = 1
+MAX_REFRESH_INTERVAL_MINUTES = 10080  # one week
+
+
+def resolve_refresh_interval(
+    per_device: int | None = None,
+    settings: int | None = None,
+    default: int = DEFAULT_REFRESH_INTERVAL_MINUTES,
+) -> int:
+    """Resolve a device's effective refresh interval in minutes.
+
+    Precedence: the per-device value, else the plugin's ``[settings]`` value,
+    else ``default``. The chosen value is then bounded:
+
+    - above ``MAX_REFRESH_INTERVAL_MINUTES`` (10080, one week) -> capped to it;
+    - below ``MIN_REFRESH_INTERVAL_MINUTES`` (1) -> falls back to ``default``.
+
+    So the result is always a sane cadence regardless of what was configured or
+    set from BigFix (out-of-range values are normalized, not rejected).
+    """
+    if per_device is not None:
+        value = per_device
+    elif settings is not None:
+        value = settings
+    else:
+        value = default
+    if value > MAX_REFRESH_INTERVAL_MINUTES:
+        return MAX_REFRESH_INTERVAL_MINUTES
+    if value < MIN_REFRESH_INTERVAL_MINUTES:
+        return default
+    return value
+
+
 # --- value parsers -------------------------------------------------------------
+
+
+def parse_int(text: str) -> int | None:
+    """Parse any integer (None if not an integer). Range is not enforced here -
+    e.g. a refresh interval is bounded later by :func:`resolve_refresh_interval`.
+    """
+    try:
+        return int(text.strip())
+    except (AttributeError, ValueError):
+        return None
 
 
 def parse_positive_int(text: str) -> int | None:

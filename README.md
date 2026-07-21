@@ -25,7 +25,7 @@ how it does something.
 | `command` | `Command` - parse a Proxy Agent command file (case-insensitive keys) |
 | `report` | `base_report(...)` (the mandatory + reserved report keys), `network_structure()`, `local_host_name()` |
 | `state` | `DeviceStateStore` - merge-on-save per-device state, report caching, deferred deletion |
-| `config` | value parsers, a settable-field registry, the `set <field> <value>` action dispatcher, and safe TOML editing |
+| `config` | value parsers, a settable-field registry, the `set <field> <value>` action dispatcher, `resolve_refresh_interval` (per-device / settings / default with clamping), and safe TOML editing |
 | `device` | `stable_device_id(key)` - a deterministic device id from a plugin-chosen key |
 | `cli` | `build_base_parser()`, `setup_logging()` - the standard entry-point plumbing |
 | `vendor` | `load_wheel()` - load a vendored pure-Python dependency (incl. this SDK) at runtime |

@@ -6,16 +6,20 @@ import pytest
 from bigfix_proxyagent import config
 from bigfix_proxyagent.command import Command
 from bigfix_proxyagent.config import (
+    DEFAULT_REFRESH_INTERVAL_MINUTES,
+    MAX_REFRESH_INTERVAL_MINUTES,
     ConfigError,
     Field,
     Settings,
     apply_set_command,
     clear_toml_option,
     parse_bool,
+    parse_int,
     parse_nonempty_str,
     parse_positive_float,
     parse_positive_int,
     parse_regex,
+    resolve_refresh_interval,
     set_toml_option,
     toml_literal,
     write_validated_toml,
@@ -27,12 +31,45 @@ tomlkit = pytest.importorskip("tomlkit")
 # --- parsers -----------------------------------------------------------------
 
 
+def test_parse_int_accepts_any_integer():
+    assert parse_int("5") == 5
+    assert parse_int(" -12 ") == -12
+    assert parse_int("0") == 0
+    assert parse_int("99999") == 99999
+    assert parse_int("x") is None
+    assert parse_int("1.5") is None
+
+
 def test_parse_positive_int():
     assert parse_positive_int("5") == 5
     assert parse_positive_int(" 12 ") == 12
     assert parse_positive_int("0") is None
     assert parse_positive_int("-1") is None
     assert parse_positive_int("x") is None
+
+
+def test_resolve_refresh_interval_precedence():
+    # per-device beats settings beats default
+    assert resolve_refresh_interval(15, 45) == 15
+    assert resolve_refresh_interval(None, 45) == 45
+    assert resolve_refresh_interval(None, None) == DEFAULT_REFRESH_INTERVAL_MINUTES
+    assert resolve_refresh_interval(None, None, default=90) == 90
+
+
+def test_resolve_refresh_interval_caps_high():
+    assert resolve_refresh_interval(999999) == MAX_REFRESH_INTERVAL_MINUTES
+    assert resolve_refresh_interval(None, 999999) == MAX_REFRESH_INTERVAL_MINUTES
+    assert resolve_refresh_interval(MAX_REFRESH_INTERVAL_MINUTES) == (
+        MAX_REFRESH_INTERVAL_MINUTES
+    )
+
+
+def test_resolve_refresh_interval_below_min_falls_back_to_default():
+    assert resolve_refresh_interval(0) == DEFAULT_REFRESH_INTERVAL_MINUTES
+    assert resolve_refresh_interval(-5) == DEFAULT_REFRESH_INTERVAL_MINUTES
+    # even though per-device is present, an out-of-range value uses the default
+    assert resolve_refresh_interval(0, 45) == DEFAULT_REFRESH_INTERVAL_MINUTES
+    assert resolve_refresh_interval(0, None, default=90) == 90
 
 
 def test_parse_positive_float():
