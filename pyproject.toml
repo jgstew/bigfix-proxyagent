@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bigfix-proxyagent"
+description = "Python SDK for building BigFix Management Extender (Proxy Agent) plugins"
+keywords = ["bigfix", "proxy agent", "management extender", "sdk"]
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "JGStew", email = "noreply@jgstew.com" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: No Input/Output (Daemon)",
+  "Intended Audience :: System Administrators",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: System :: Systems Administration",
+  "Topic :: Software Development :: Libraries",
+]
+dependencies = []
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/jgstew/bigfix-proxyagent"
+
+[dependency-groups]
+# tomlkit is an optional runtime extra (comment-preserving TOML edits; the
+# config editor falls back to regex without it) - here only to test both paths.
+dev = ["pytest", "tomlkit"]
+
+[tool.hatch.version]
+path = "bigfix_proxyagent/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bigfix_proxyagent"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--cov=bigfix_proxyagent --cov-report=term-missing --cov-fail-under=99"
+
+# read by flake8 via the Flake8-pyproject plugin (see .pre-commit-config.yaml)
+[tool.flake8]
+select = ["B", "C", "E", "F", "P", "W", "B9"]
+max-line-length = 88
+extend-ignore = ["E203", "W503", "F401"]
+### DEFAULT IGNORES FOR 4-space INDENTED PROJECTS ###
+# E127, E128 are hard to silence in certain nested formatting situations.
+# E203 doesn't work for slicing
+# E265, E266 talk about comment formatting which is too opinionated.
+# E402 warns on imports coming after statements. There are important use cases
+# that require statements before imports.
+# E501 is not flexible enough, we're using B950 instead.
+# E722 is a duplicate of B001.
+# P207 is a duplicate of B003.
+# P208 is a duplicate of C403.
+# W503 talks about operator formatting which is too opinionated.
+ignore = ["E127", "E128", "E203", "E265", "E266", "E402", "E501", "E722", "P207", "P208", "W503"]
+exclude = [".git", "__pycache__"]
+
+[tool.pylint."messages control"]
+disable = ["C0103", "C0209", "c-extension-no-member", "missing-function-docstring"]
+
+[tool.pylint.format]
+max-line-length = 88
+
+[tool.codespell]
+skip = "./.git"
