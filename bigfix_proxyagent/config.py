@@ -43,30 +43,41 @@ class ConfigError(ValueError):
     """Raised when configuration is invalid or an edit would corrupt the file."""
 
 
-# --- refresh interval ----------------------------------------------------------
+# --- bounded per-device settings -----------------------------------------------
+#
+# Two settings almost every plugin has - how often to refresh a device, and how
+# long to wait on the external system - follow the same shape: a per-device
+# value overrides a plugin-wide ``[settings]`` value, which overrides a default,
+# and the result is clamped to a sane range. :func:`resolve_bounded` is that
+# rule; the two wrappers below fix the range and default for each.
 
-# How often a proxied device's data is refreshed, in minutes. A plugin resolves
-# the effective value per device with :func:`resolve_refresh_interval`.
+# Refresh interval, in minutes.
 DEFAULT_REFRESH_INTERVAL_MINUTES = 30
 MIN_REFRESH_INTERVAL_MINUTES = 1
 MAX_REFRESH_INTERVAL_MINUTES = 10080  # one week
 
+# External-system timeout, in seconds. The floor is deliberately permissive (a
+# plugin can enforce a stricter minimum itself); the SDK only rules out
+# non-positive/absurd values.
+DEFAULT_TIMEOUT_SECONDS = 45
+MIN_TIMEOUT_SECONDS = 2
+MAX_TIMEOUT_SECONDS = 900  # 15 minutes
 
-def resolve_refresh_interval(
-    per_device: int | None = None,
-    settings: int | None = None,
-    default: int = DEFAULT_REFRESH_INTERVAL_MINUTES,
-) -> int:
-    """Resolve a device's effective refresh interval in minutes.
 
-    Precedence: the per-device value, else the plugin's ``[settings]`` value,
-    else ``default``. The chosen value is then bounded:
+def resolve_bounded(
+    per_device: float | None,
+    settings: float | None,
+    default: float,
+    minimum: float,
+    maximum: float,
+) -> float:
+    """Resolve a per-device numeric setting with precedence and clamping.
 
-    - above ``MAX_REFRESH_INTERVAL_MINUTES`` (10080, one week) -> capped to it;
-    - below ``MIN_REFRESH_INTERVAL_MINUTES`` (1) -> falls back to ``default``.
-
-    So the result is always a sane cadence regardless of what was configured or
-    set from BigFix (out-of-range values are normalized, not rejected).
+    Precedence: ``per_device`` if set, else ``settings`` if set, else
+    ``default``. The chosen value is then bounded: above ``maximum`` -> capped
+    to ``maximum``; below ``minimum`` -> falls back to ``default``. So any
+    out-of-range value (from config or a BigFix ``set``) is normalized, not
+    rejected. The value keeps its own numeric type (int in -> int out).
     """
     if per_device is not None:
         value = per_device
@@ -74,11 +85,45 @@ def resolve_refresh_interval(
         value = settings
     else:
         value = default
-    if value > MAX_REFRESH_INTERVAL_MINUTES:
-        return MAX_REFRESH_INTERVAL_MINUTES
-    if value < MIN_REFRESH_INTERVAL_MINUTES:
+    if value > maximum:
+        return maximum
+    if value < minimum:
         return default
     return value
+
+
+def resolve_refresh_interval(
+    per_device: int | None = None,
+    settings: int | None = None,
+    default: int = DEFAULT_REFRESH_INTERVAL_MINUTES,
+) -> int:
+    """Resolve a device's effective refresh interval in minutes (precedence
+    per-device -> [settings] -> default; bounded to
+    [1, 10080], an out-of-range low value falling back to ``default``).
+    """
+    return int(
+        resolve_bounded(
+            per_device,
+            settings,
+            default,
+            MIN_REFRESH_INTERVAL_MINUTES,
+            MAX_REFRESH_INTERVAL_MINUTES,
+        )
+    )
+
+
+def resolve_timeout_seconds(
+    per_device: float | None = None,
+    settings: float | None = None,
+    default: float = DEFAULT_TIMEOUT_SECONDS,
+) -> float:
+    """Resolve a device's effective external-system timeout in seconds
+    (precedence per-device -> [settings] -> default; bounded to [2, 900], an
+    out-of-range low value falling back to ``default``).
+    """
+    return resolve_bounded(
+        per_device, settings, default, MIN_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS
+    )
 
 
 # --- value parsers -------------------------------------------------------------
@@ -90,6 +135,16 @@ def parse_int(text: str) -> int | None:
     """
     try:
         return int(text.strip())
+    except (AttributeError, ValueError):
+        return None
+
+
+def parse_float(text: str) -> float | None:
+    """Parse any float (None if not a number). Range is not enforced here -
+    e.g. a timeout is bounded later by :func:`resolve_timeout_seconds`.
+    """
+    try:
+        return float(text.strip())
     except (AttributeError, ValueError):
         return None
 

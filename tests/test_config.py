@@ -7,19 +7,23 @@ from bigfix_proxyagent import config
 from bigfix_proxyagent.command import Command
 from bigfix_proxyagent.config import (
     DEFAULT_REFRESH_INTERVAL_MINUTES,
+    DEFAULT_TIMEOUT_SECONDS,
     MAX_REFRESH_INTERVAL_MINUTES,
+    MAX_TIMEOUT_SECONDS,
     ConfigError,
     Field,
     Settings,
     apply_set_command,
     clear_toml_option,
     parse_bool,
+    parse_float,
     parse_int,
     parse_nonempty_str,
     parse_positive_float,
     parse_positive_int,
     parse_regex,
     resolve_refresh_interval,
+    resolve_timeout_seconds,
     set_toml_option,
     toml_literal,
     write_validated_toml,
@@ -70,6 +74,29 @@ def test_resolve_refresh_interval_below_min_falls_back_to_default():
     # even though per-device is present, an out-of-range value uses the default
     assert resolve_refresh_interval(0, 45) == DEFAULT_REFRESH_INTERVAL_MINUTES
     assert resolve_refresh_interval(0, None, default=90) == 90
+
+
+def test_parse_float_accepts_any_number():
+    assert parse_float("2.5") == 2.5
+    assert parse_float(" -3 ") == -3.0
+    assert parse_float("900") == 900.0
+    assert parse_float("x") is None
+
+
+def test_resolve_timeout_seconds():
+    # precedence per-device -> settings -> default (45)
+    assert resolve_timeout_seconds(10, 30) == 10
+    assert resolve_timeout_seconds(None, 30) == 30
+    assert resolve_timeout_seconds(None, None) == DEFAULT_TIMEOUT_SECONDS
+    # capped at 900
+    assert resolve_timeout_seconds(5000) == MAX_TIMEOUT_SECONDS
+    # 2s is the (permissive) minimum
+    assert resolve_timeout_seconds(2) == 2
+    # below the 2s minimum -> default, even when a settings value exists
+    assert resolve_timeout_seconds(1) == DEFAULT_TIMEOUT_SECONDS
+    assert resolve_timeout_seconds(1, 30) == DEFAULT_TIMEOUT_SECONDS
+    # float values keep their type
+    assert resolve_timeout_seconds(12.5) == 12.5
 
 
 def test_parse_positive_float():

@@ -13,4 +13,4 @@ base class - so a plugin only has to supply its own device-specific logic.
 The protocol reference lives in ``reference/ProxyAgents.md``.
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
