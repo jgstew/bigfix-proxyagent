@@ -1,7 +1,12 @@
 import socket
 
 from bigfix_proxyagent import report
-from bigfix_proxyagent.report import base_report, local_host_name, network_structure
+from bigfix_proxyagent.report import (
+    base_report,
+    local_host_name,
+    network_structure,
+    restamp_report,
+)
 
 
 def test_base_report_mandatory_keys_and_defaults():
@@ -104,3 +109,26 @@ def test_network_structure_unparseable_ip_falls_back():
     assert "adapters" not in net
     net6 = network_structure("garbage:with:colons")
     assert "adapters" in net6
+
+
+def test_restamp_report_advances_communication_and_sequence():
+    original = {
+        "device id": "dev1",
+        "http check": {"response code": 299},
+        "last server communication": "old",
+        "device report sequence": 5,
+        "deviceReportSequence": 5,
+    }
+    out = restamp_report(original, last_server_communication="new", sequence=9)
+    assert out is original  # mutated in place, returned for chaining
+    assert original["last server communication"] == "new"
+    assert original["device report sequence"] == 9
+    assert original["deviceReportSequence"] == 9
+    assert original["http check"] == {"response code": 299}  # payload untouched
+
+
+def test_restamp_report_without_sequence_leaves_sequence_keys():
+    original = {"device report sequence": 5, "last server communication": "old"}
+    restamp_report(original, last_server_communication="new")
+    assert original["last server communication"] == "new"
+    assert original["device report sequence"] == 5  # untouched when sequence is None

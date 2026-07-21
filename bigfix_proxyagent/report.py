@@ -92,6 +92,29 @@ def base_report(
     return report
 
 
+def restamp_report(
+    report: dict[str, Any],
+    *,
+    last_server_communication: str,
+    sequence: int | None = None,
+) -> dict[str, Any]:
+    """Freshen a cached report for re-submission, in place.
+
+    A polling plugin caches a device's last report and replays it while the
+    device is not yet due for fresh work. Replaying verbatim would look stale
+    to the agent (the effective communication time would not advance) and could
+    echo an old report sequence, so this advances ``last server communication``
+    to ``last_server_communication`` and, when ``sequence`` is given, re-stamps
+    both :data:`SEQUENCE_KEYS`. All other (cached) data is left untouched.
+    Returns the same dict for chaining.
+    """
+    report["last server communication"] = last_server_communication
+    if sequence is not None:
+        for key in SEQUENCE_KEYS:
+            report[key] = sequence
+    return report
+
+
 def network_structure(peer_ip: str) -> dict[str, Any]:
     """Model a remote IP as the device's built-in network inspectors.
 
