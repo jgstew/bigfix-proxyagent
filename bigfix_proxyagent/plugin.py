@@ -4,7 +4,8 @@ The Proxy Agent launches a plugin fire-and-forget: it drops JSON command files
 into a directory, starts the executable pointing at it, and does not wait. The
 plugin must process every command file, answer each by writing reports or
 results into that command's output directory, delete each command file to
-acknowledge it, and exit (see ``reference/ProxyAgents.md``).
+acknowledge it, and exit (see the servermon repo's
+``bigfix/reference-files/ProxyAgents.md``).
 
 :class:`ProxyAgentPlugin` owns that loop, the refresh/action dispatch, and the
 file-writing conventions (result-file naming, atomic writes). A concrete
@@ -85,7 +86,8 @@ class ProxyAgentPlugin(abc.ABC):
     @abc.abstractmethod
     def handle_refresh(self, command: Command) -> None:
         """Answer a refresh: write ``<device id>.report`` file(s) into
-        ``command.output_directory`` (via :meth:`write_report`), then
+        ``command.output_directory`` (via :meth:`write_report`), then.
+
         :meth:`remove_command_file`.
 
         A refresh carrying a ``command_id`` is action-driven ("check now"):
@@ -98,7 +100,8 @@ class ProxyAgentPlugin(abc.ABC):
 
         The default supports no actions. Override to return e.g.
         ``{"delete device": self._delete}``. Names must be actionscript
-        commands the agent will forward (see ``reference/ProxyPluginCommands.json``).
+        commands the agent will forward (see the servermon repo's
+        ``bigfix/reference-files/ProxyPluginCommands.json``).
         """
         return {}
 

@@ -10,7 +10,7 @@ from bigfix_proxyagent.plugin import ProxyAgentPlugin
 class DemoPlugin(ProxyAgentPlugin):
     """Minimal concrete plugin: one device, one supported action."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.refreshed = []
         self.deleted = []
 

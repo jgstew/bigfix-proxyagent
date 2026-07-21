@@ -43,7 +43,7 @@ def interval_elapsed(
     """Whether at least ``interval_minutes * multiplier`` (less ``slack``) have
     passed since ``last``.
 
-    Returns True when ``last`` is None (never done) or unparseable, so a
+    Returns True when ``last`` is None (never done) or unparsable, so a
     missing or corrupt timestamp forces the work rather than deferring it
     forever. ``multiplier`` scales the interval (e.g. run a sub-task once every
     N poll intervals).
@@ -63,7 +63,7 @@ def version_forces_recheck(previous: str | None, current: str | None) -> bool:
     A minor/major bump can change a report's shape or a check's semantics, so
     the device is re-done immediately instead of replaying a cached result; a
     patch bump does not. Returns False when either version is missing or
-    unparseable (no baseline), so the normal interval applies.
+    unparsable (no baseline), so the normal interval applies.
     """
     prev = major_minor(previous)
     curr = major_minor(current)

@@ -95,7 +95,9 @@ class DeviceStateStore:
 
     def store_report(self, device_id: str, report: dict[str, Any]) -> None:
         """Cache a device's report so a refresh within its check interval can
-        re-submit it without redoing the underlying work. The volatile report
+        re-submit it without redoing the underlying work.
+
+        The volatile report
         sequence keys are dropped so a stale sequence is never replayed.
         """
         entry = self.get(device_id)
@@ -188,7 +190,8 @@ class DeviceStateStore:
 
 class _StateBackend:
     """Raw persistence for the store: load the device->entry map, and save one
-    instance's changes with merge-on-save semantics (only touch the devices
+    instance's changes with merge-on-save semantics (only touch the devices.
+
     this instance changed, so a concurrent instance's writes survive).
 
     Backends deal in raw dicts; whitelisting via ``_clean_entry`` is the

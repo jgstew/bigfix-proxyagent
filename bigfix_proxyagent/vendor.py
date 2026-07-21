@@ -209,7 +209,8 @@ def _cache_bundled_in_vendor(name: str, vendor_dir: Path | str) -> bool:
 
 def _newest_bundled_resource(name: str):
     """Newest ``<name>-*.whl`` :class:`~importlib.resources.abc.Traversable`
-    under the SDK's ``_vendor/`` package, or ``None``."""
+    under the SDK's ``_vendor/`` package, or ``None``.
+    """
     anchor = resources.files(__package__).joinpath("_vendor")
     prefix = f"{name}-"
     matches = [

@@ -2,11 +2,8 @@ import os
 
 import pytest
 
-from bigfix_proxyagent.util import (
-    write_bytes_atomic,
-    write_json_atomic,
-    write_text_atomic,
-)
+from bigfix_proxyagent.util import (write_bytes_atomic, write_json_atomic,
+                                    write_text_atomic)
 
 
 def test_write_bytes_is_atomic_and_creates_parents(tmp_path):

@@ -10,7 +10,8 @@ every plugin - command-file parsing, atomic report/result writes, the
 merge-on-save device state store, report scaffolding, and the command-loop
 base class - so a plugin only has to supply its own device-specific logic.
 
-The protocol reference lives in ``reference/ProxyAgents.md``.
+The protocol reference lives in the servermon repo's
+``bigfix/reference-files/ProxyAgents.md``.
 """
 
-__version__ = "0.1.6"
+__version__ = "0.8.1"

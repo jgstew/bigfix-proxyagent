@@ -29,10 +29,11 @@ from __future__ import annotations
 
 import logging
 import re
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
+
+import tomllib
 
 from .command import Command
 from .util import write_text_atomic
@@ -103,7 +104,8 @@ def resolve_refresh_interval(
     default: int = DEFAULT_REFRESH_INTERVAL_MINUTES,
 ) -> int:
     """Resolve a device's effective refresh interval in minutes (precedence
-    per-device -> [settings] -> default; bounded to
+    per-device -> [settings] -> default; bounded to.
+
     [1, 10080], an out-of-range low value falling back to ``default``).
     """
     return int(
@@ -123,7 +125,8 @@ def resolve_timeout_seconds(
     default: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> float:
     """Resolve a device's effective external-system timeout in seconds
-    (precedence per-device -> [settings] -> default; bounded to [2, 900], an
+    (precedence per-device -> [settings] -> default; bounded to [2, 900], an.
+
     out-of-range low value falling back to ``default``).
     """
     return resolve_bounded(
@@ -135,7 +138,9 @@ def resolve_timeout_seconds(
 
 
 def parse_int(text: str) -> int | None:
-    """Parse any integer (None if not an integer). Range is not enforced here -
+    """Parse any integer (None if not an integer).
+
+    Range is not enforced here -
     e.g. a refresh interval is bounded later by :func:`resolve_refresh_interval`.
     """
     try:
@@ -145,7 +150,9 @@ def parse_int(text: str) -> int | None:
 
 
 def parse_float(text: str) -> float | None:
-    """Parse any float (None if not a number). Range is not enforced here -
+    """Parse any float (None if not a number).
+
+    Range is not enforced here -
     e.g. a timeout is bounded later by :func:`resolve_timeout_seconds`.
     """
     try:
@@ -462,7 +469,9 @@ def clear_aot_option(
     validate: Validate | None = None,
 ) -> None:
     """Remove ``key`` from the matching ``[[table]]`` entry (a no-op if the key
-    is already absent), editing in place. Raises :class:`ConfigError` if no
+    is already absent), editing in place.
+
+    Raises :class:`ConfigError` if no
     matching entry exists, tomlkit cannot be loaded, or the result would not
     parse.
     """
@@ -506,7 +515,9 @@ def add_aot_entry(
     validate: Validate | None = None,
 ) -> None:
     """Append a new ``[[table]]`` entry with the given ``entry`` fields (in-place
-    edit). A leftover ``table = []`` placeholder is replaced by the new entry.
+    edit).
+
+    A leftover ``table = []`` placeholder is replaced by the new entry.
 
     The result is re-parsed (and ``validate``-checked) before it is committed,
     so a schema violation (e.g. a duplicate identity) raises

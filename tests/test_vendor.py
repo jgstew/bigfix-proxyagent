@@ -285,7 +285,7 @@ def test_or_bundled_falls_through_when_cached_wheel_unloadable(monkeypatch):
 class _FakeZipResource:
     """A bundled resource backed by a zip (no real filesystem path)."""
 
-    def __init__(self, name, payload):
+    def __init__(self, name, payload) -> None:
         self.name = name
         self._payload = payload
 

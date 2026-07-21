@@ -3,12 +3,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from bigfix_proxyagent.scheduling import (
-    DUE_SLACK,
-    interval_elapsed,
-    minutes_since,
-    version_forces_recheck,
-)
+from bigfix_proxyagent.scheduling import (DUE_SLACK, interval_elapsed,
+                                          minutes_since,
+                                          version_forces_recheck)
 
 TZ = timezone(timedelta(hours=-4))
 NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=TZ)

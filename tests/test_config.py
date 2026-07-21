@@ -1,36 +1,24 @@
 import sys
-import tomllib
 
 import pytest
+import tomllib
 
 from bigfix_proxyagent import config
 from bigfix_proxyagent.command import Command
-from bigfix_proxyagent.config import (
-    DEFAULT_REFRESH_INTERVAL_MINUTES,
-    DEFAULT_TIMEOUT_SECONDS,
-    MAX_REFRESH_INTERVAL_MINUTES,
-    MAX_TIMEOUT_SECONDS,
-    ConfigError,
-    Field,
-    Settings,
-    add_aot_entry,
-    apply_set_command,
-    clear_aot_option,
-    clear_toml_option,
-    parse_bool,
-    parse_float,
-    parse_int,
-    parse_nonempty_str,
-    parse_positive_float,
-    parse_positive_int,
-    parse_regex,
-    remove_aot_entry,
-    resolve_refresh_interval,
-    resolve_timeout_seconds,
-    set_aot_option,
-    set_toml_option,
-    write_validated_toml,
-)
+from bigfix_proxyagent.config import (DEFAULT_REFRESH_INTERVAL_MINUTES,
+                                      DEFAULT_TIMEOUT_SECONDS,
+                                      MAX_REFRESH_INTERVAL_MINUTES,
+                                      MAX_TIMEOUT_SECONDS, ConfigError, Field,
+                                      Settings, add_aot_entry,
+                                      apply_set_command, clear_aot_option,
+                                      clear_toml_option, parse_bool,
+                                      parse_float, parse_int,
+                                      parse_nonempty_str, parse_positive_float,
+                                      parse_positive_int, parse_regex,
+                                      remove_aot_entry,
+                                      resolve_refresh_interval,
+                                      resolve_timeout_seconds, set_aot_option,
+                                      set_toml_option, write_validated_toml)
 
 tomlkit = pytest.importorskip("tomlkit")
 

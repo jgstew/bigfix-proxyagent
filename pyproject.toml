@@ -34,7 +34,7 @@ Homepage = "https://github.com/jgstew/bigfix-proxyagent"
 # tomlkit does comment-preserving TOML edits; the SDK bundles a copy in
 # _vendor/, so this is only here to exercise the config editor under an
 # installed (rather than bundled) tomlkit in tests.
-dev = ["pytest", "tomlkit"]
+dev = ["pytest", "pytest-cov", "tomlkit"]
 
 [tool.hatch.version]
 path = "bigfix_proxyagent/__init__.py"
@@ -52,6 +52,12 @@ artifacts = ["bigfix_proxyagent/_vendor/*.whl"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "--cov=bigfix_proxyagent --cov-report=term-missing --cov-fail-under=99"
+
+[tool.coverage.run]
+# Never gate our own coverage on bundled third-party code: when tomlkit is not
+# installed the config editor loads the wheel bundled under _vendor/, and
+# --cov=bigfix_proxyagent would otherwise sweep in all of tomlkit's source.
+omit = ["*/_vendor/*"]
 
 # read by flake8 via the Flake8-pyproject plugin (see .pre-commit-config.yaml)
 [tool.flake8]

@@ -24,7 +24,7 @@ how it does something.
 | `plugin` | `ProxyAgentPlugin` - the command-loop base class (dispatch, report/result writing, ack conventions) |
 | `command` | `Command` - parse a Proxy Agent command file (case-insensitive keys) |
 | `report` | `base_report(...)` (the mandatory + reserved report keys), `network_structure()`, `local_host_name()` |
-| `state` | `DeviceStateStore` - merge-on-save per-device state (JSON default, or SQLite via `backend="sqlite"` with one-way JSON→SQLite migration and auto-detect of an existing SQLite file), report caching, deferred deletion |
+| `state` | `DeviceStateStore` - merge-on-save per-device state (JSON default, or SQLite via `backend="sqlite"` with one-way JSON->SQLite migration and auto-detect of an existing SQLite file), report caching, deferred deletion |
 | `config` | value parsers, a settable-field registry, the `set <field> <value>` action dispatcher, `resolve_refresh_interval` (per-device / settings / default with clamping), and safe TOML editing |
 | `device` | `stable_device_id(key)` - a deterministic device id from a plugin-chosen key |
 | `cli` | `build_base_parser()`, `setup_logging()` - the standard entry-point plumbing |
@@ -71,18 +71,18 @@ from bigfix_proxyagent.plugin import ProxyAgentPlugin
 
 class MyPlugin(ProxyAgentPlugin):
     def handle_refresh(self, command):
-        for device in self.discover():          # your device-specific work
+        for device in self.discover():  # your device-specific work
             r = report.base_report(
                 stable_device_id(device.key),
                 device.name,
-                "myplugin",                      # the data source / plugin id
+                "myplugin",  # the data source / plugin id
                 last_server_communication=device.checked_at,
                 plugin_version="1.0.0",
                 plugin_host=report.local_host_name(),
             )
-            r["my check"] = {"value": device.value}   # your inspector data
+            r["my check"] = {"value": device.value}  # your inspector data
             self.write_report(command.output_directory, r)
-        self.remove_command_file(command)        # last step: acknowledge
+        self.remove_command_file(command)  # last step: acknowledge
 
     def commands(self):
         return {"delete device": self._delete}
@@ -100,15 +100,23 @@ omit the field entirely to reject it):
 
 ```python
 from bigfix_proxyagent.config import (
-    Field, Settings, apply_set_command, parse_positive_int, parse_bool,
-    set_toml_option, clear_toml_option,
+    Field,
+    Settings,
+    apply_set_command,
+    parse_positive_int,
+    parse_bool,
+    set_toml_option,
+    clear_toml_option,
 )
 
-FIELDS = Settings({
-    "timeout_seconds": Field(parse_positive_int, default=30),
-    "verbose":         Field(parse_bool, default=False),
-    "api_key":         Field(parse_positive_int, settable=False),  # file-only
-})
+FIELDS = Settings(
+    {
+        "timeout_seconds": Field(parse_positive_int, default=30),
+        "verbose": Field(parse_bool, default=False),
+        "api_key": Field(parse_positive_int, settable=False),  # file-only
+    }
+)
+
 
 def _set(self, command):
     def apply(field, value, clearing):
@@ -116,6 +124,7 @@ def _set(self, command):
             clear_toml_option(self.config_path, field, table="settings")
         else:
             set_toml_option(self.config_path, field, value, table="settings")
+
     self.respond(command, apply_set_command(command, FIELDS, apply))
     self.remove_command_file(command)
 ```
@@ -124,6 +133,7 @@ Entry point (`build_base_parser` + `setup_logging` do the standard plumbing):
 
 ```python
 from bigfix_proxyagent import cli
+
 
 def main(argv=None):
     parser = cli.build_base_parser("myplugin", "My plugin.", version="1.0.0")

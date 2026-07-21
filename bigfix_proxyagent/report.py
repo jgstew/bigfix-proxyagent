@@ -6,7 +6,8 @@ plugin" object, the effective-communication timestamp, and the echoed report
 sequence. :func:`base_report` fills those; a plugin adds its own inspector
 data (the domain payload) on top of the returned dict.
 
-See "Device reports" in ``reference/ProxyAgents.md``.
+See "Device reports" in the servermon repo's
+``bigfix/reference-files/ProxyAgents.md``.
 """
 
 from __future__ import annotations

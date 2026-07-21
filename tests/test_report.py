@@ -1,12 +1,8 @@
 import socket
 
 from bigfix_proxyagent import report
-from bigfix_proxyagent.report import (
-    base_report,
-    local_host_name,
-    network_structure,
-    restamp_report,
-)
+from bigfix_proxyagent.report import (base_report, local_host_name,
+                                      network_structure, restamp_report)
 
 
 def test_base_report_mandatory_keys_and_defaults():
